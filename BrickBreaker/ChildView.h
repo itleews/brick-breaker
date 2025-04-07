@@ -20,22 +20,29 @@ public:
 public:
 	GameManager m_gameManager;
 	CRect m_boundary;
+	CString m_strTime;
 	ULONGLONG m_startTick;
-	bool m_isRunning;
-	CButton m_startButton;
+	int highScore = 0;
+	bool m_bShowContinueMsg = true;   // 깜빡임 상태
 
 // 작업입니다.
 public:
+	void DrawBackground(CDC* pDC, const CRect& rect);
+	void DrawGameScene(CDC* pDC);
+	void DrawStatus(CDC* pDC, const CRect& rect);
+	void DrawStartScreen(CDC* pDC, const CRect& rect);
+	void DrawGameResultMessage(CDC* pDC, const CRect& rect);
 
 // 재정의입니다.
 	protected:
 	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
+	virtual BOOL PreTranslateMessage(MSG* pMsg);
 
 // 구현입니다.
 public:
 	virtual ~CChildView();
 
-	// 생성된 메시지 맵 함수
+// 생성된 메시지 맵 함수
 protected:
 	afx_msg void OnPaint();
 	afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags);
@@ -43,10 +50,8 @@ protected:
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	DECLARE_MESSAGE_MAP()
 public:
-	virtual BOOL PreTranslateMessage(MSG* pMsg);
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	afx_msg void OnDestroy();
 	afx_msg void OnSize(UINT nType, int cx, int cy);
-	afx_msg void OnStartButton();
 };
 

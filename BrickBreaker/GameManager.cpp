@@ -19,16 +19,16 @@ void GameManager::StartGame(CRect boundary, CWnd* pWnd) {
     int paddleX = centerX - paddleWidth / 2;
     int paddleY = boundary.bottom - paddleHeight - 10;
 
-    paddles.push_back(Paddle(paddleX, paddleY, paddleWidth, paddleHeight, 0, 0));
+    paddles.push_back(Paddle(paddleX, paddleY, paddleWidth, paddleHeight, 0));
 
     int ballRadius = 20;
 
 	for (int i = 0; i < ballCount; i++) {
 		// 공을 패들 위에 배치
 		int ballX = centerX + i * ballRadius;  // 공 간격 조정
-		int ballY = paddleY - (i * (ballRadius * 2 + 5));  // 패들의 위쪽에 공 배치
+		int ballY = paddleY - 20 - (i * (ballRadius * 2 + 5));  // 패들의 위쪽에 공 배치
 		// 공 생성 및 추가
-		balls.push_back(Ball(i, ballX, ballY, ballRadius, 10, -10));  // 속도 (10, -10)
+		balls.push_back(Ball(i, ballX, ballY, ballRadius, 20, -20));
 	}
 
     int rows = 10;
@@ -48,7 +48,7 @@ void GameManager::StartGame(CRect boundary, CWnd* pWnd) {
             int y = startY + row * (brickHeight + gap);
 
             // 랜덤 내구도 (1~3)  
-            int hitCount = (rand() % 3) + 1;
+            int hitCount = /*(rand() % 3) +*/ 1;
             int r = 0, g = 0, b = 0;
             switch (hitCount) {
             case 1:
@@ -66,6 +66,8 @@ void GameManager::StartGame(CRect boundary, CWnd* pWnd) {
             bricks.push_back(Brick(x, y, brickWidth, brickHeight, color, hitCount));
         }
     }
+
+    HighScore();
 }
 
 void GameManager::EndGame(CWnd* pWnd) {  
@@ -81,22 +83,6 @@ void GameManager::ResetGame(const CRect& boundary, CWnd* pWnd) {
     StartGame(boundary, pWnd);
     CChildView* pChildView = static_cast<CChildView*>(pWnd);
     pChildView->m_startTick = GetTickCount64();
-}
-
-void GameManager::ClearGame(CWnd* pWnd)
-{
-    EndGame(pWnd);
-    MessageBox(pWnd->GetSafeHwnd(), _T("축하합니다! 벽돌이 모두 깨졌습니다!"), _T("승리!"), MB_ICONASTERISK);
-    if (AfxMessageBox(_T("게임을 다시 시작하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) == IDYES)
-    {
-        CChildView* pChildView = static_cast<CChildView*>(pWnd);
-        ResetGame(pChildView->m_boundary, pWnd);
-        SetTimer(pWnd->GetSafeHwnd(), 1, 16, nullptr);
-    }
-    else
-    {
-        PostQuitMessage(0); // 프로그램 종료  
-    }
 }
 
 void GameManager::DrawGame(CDC* pDC) {  
@@ -134,18 +120,6 @@ void GameManager::HandleCollisions(CWnd* pWnd) {
             if (brick.isBroken) // 부서진 경우
                 continue;
 
-            //if (ball.m_x + ball.m_radius < brick.x) // 볼 좌측
-            //    continue;
-
-            //if (ball.m_x - ball.m_radius > brick.x + brick.width) // 볼 우측
-            //    continue;
-
-            //if (ball.m_y + ball.m_radius < brick.y) // 볼 하단
-            //    continue;
-
-            //if (ball.m_y - ball.m_radius > brick.y + brick.height) // 볼 상단
-            //    continue;
-
 			double closestX = clamp(ball.m_x, (double)brick.x, (double)(brick.x + brick.width));
 			double closestY = clamp(ball.m_y, (double)brick.y, (double)(brick.y + brick.height));
 
@@ -159,30 +133,20 @@ void GameManager::HandleCollisions(CWnd* pWnd) {
 
             // 공과 벽돌 충돌
             std::println("충돌! 볼 위치 {}, {} / 브릭 위치 [{}, {} / {}, {}]", ball.m_x, ball.m_y, brick.x, brick.y, brick.x + brick.width, brick.y + brick.height);
-            
-
-            // std::cout << "충돌한 벽 번호 :  위치 : 
 
             brick.Break();
             brick.Update(boundary, pWnd);
             if (brick.isBroken)
                 --m_brickCount;
 
+            if (ball.m_dy > 0) continue;
+
             // 방향성 변경
-            if (ball.m_dy < 0) {
-                std::println("볼 방향성 변경");
-                ball.m_dy = -ball.m_dy;
+            if (std::abs(dx) > std::abs(dy)) {
+                ball.m_dx = -ball.m_dx;
             }
-
-            //for (int i = 0; i < 5; i++) 
-            //{
-            //    ball.m_dy -= i * 2;
-            //}
-
-
-            if (m_brickCount == 0)
-            {
-				ClearGame(pWnd);
+            else {
+                ball.m_dy = -ball.m_dy;
             }
         }
     }  
@@ -191,36 +155,36 @@ void GameManager::HandleCollisions(CWnd* pWnd) {
     {
         for (auto& ball : balls)
         {
-            if (ball.m_x + ball.m_radius >= paddle.x &&
-                ball.m_x - ball.m_radius <= paddle.x + paddle.width &&
-                ball.m_y + ball.m_radius >= paddle.y &&
-                ball.m_y - ball.m_radius <= paddle.y + paddle.height)
-            {
+            double closestX = clamp(ball.m_x, (double)paddle.x, (double)(paddle.x + paddle.width));
+            double closestY = clamp(ball.m_y, (double)paddle.y, (double)(paddle.y + paddle.height));
 
-                // 공이 패들의 어느 방향에서 왔는지 판단하여 반사  
-                float overlapLeft = (ball.m_x + ball.m_radius) - paddle.x;
-                float overlapRight = (paddle.x + paddle.width) - (ball.m_x - ball.m_radius);
-                float overlapTop = (ball.m_y + ball.m_radius) - paddle.y;
-                float overlapBottom = (paddle.y + paddle.height) - (ball.m_y - ball.m_radius);
+            double dx = ball.m_x - closestX;
+            double dy = ball.m_y - closestY;
 
-                if (min(overlapLeft, overlapRight) < min(overlapTop, overlapBottom)) {
-                    ball.m_dx = -ball.m_dx; // 좌우 반사
-                    ball.m_dx = 30;
-                }
-                else {
-                    ball.m_dy = -ball.m_dy; // 상하 반사
-                    ball.m_dy = 30;
-                }
+            double distanceSquared = dx * dx + dy * dy;
 
-                // 패들의 위치에 따라 공의 속도를 조정 (더 자연스럽게)  
-                float hitPosition = (ball.m_x - (paddle.x + paddle.width / 2)) / (paddle.width / 2);
-                ball.m_dx += hitPosition * 2.0f;  // 공의 x 속도를 패들에 맞춰 변화  
+            if (distanceSquared > ball.m_radius * ball.m_radius) // 공과 패들의 거리
+                continue;
+			
+            if (ball.m_dy < 0) continue;
 
-                // 패들이 위로 밀 때 공이 위로 튕기도록 설정  
-                if (ball.m_dy > 0) {
-                    ball.m_dy = -ball.m_dy;
-                }
+            // 방향성 변경
+            if (std::abs(dx) > std::abs(dy)) {
+                ball.m_dx = -ball.m_dx;
+            }
+            else {
+                ball.m_dy = -ball.m_dy;
             }
         }
     }
+}
+
+int GameManager::HighScore() {
+	// 최고 점수 계산
+	int score = 2000 - m_brickCount * 10;
+    if (score > m_highScore) {
+        m_highScore = score;
+    }
+    std::println("현재 점수: {}, 최고 점수: {}", score, m_highScore);
+	return m_highScore;
 }

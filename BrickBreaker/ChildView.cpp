@@ -14,7 +14,6 @@
 // CChildView
 
 CChildView::CChildView()
-	: m_isRunning(false)
 {
 	m_startTick = 0;
 	m_boundary.SetRect(0, 0, 100, 100);
@@ -24,21 +23,6 @@ CChildView::~CChildView()
 {
 }
 
-BOOL CChildView::PreTranslateMessage(MSG* pMsg)
-{
-	// 엔터키 눌렀을 때 버튼이 포커스되어 있으면 클릭 처리
-	if (pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_RETURN)
-	{
-		if (GetFocus() == &m_startButton)
-		{
-			m_startButton.SendMessage(BM_CLICK);
-			return TRUE; // 처리했으니 리턴
-		}
-	}
-	return CWnd::PreTranslateMessage(pMsg);
-}
-
-
 BEGIN_MESSAGE_MAP(CChildView, CWnd)
 	ON_WM_PAINT()
 	ON_WM_KEYDOWN()
@@ -47,12 +31,33 @@ BEGIN_MESSAGE_MAP(CChildView, CWnd)
 	ON_WM_CREATE()
 	ON_WM_DESTROY()
 	ON_WM_SIZE()
-	ON_BN_CLICKED(1, &CChildView::OnStartButton)
 END_MESSAGE_MAP()
 
+enum GameState {
+	GAME_RUNNING,
+	GAME_WIN,
+	GAME_LOSE,
+	GAME_READY
+};
 
+GameState m_gameState = GAME_READY; // 초기 상태
 
 // CChildView 메시지 처리기
+
+BOOL CChildView::PreTranslateMessage(MSG* pMsg)
+{
+    if (pMsg->message == WM_KEYDOWN)
+    {
+        if (m_gameState == GAME_WIN || m_gameState == GAME_LOSE)
+        {
+            m_gameState = GAME_READY;
+			KillTimer(2);
+			m_bShowContinueMsg = true;
+            Invalidate(); // 화면 다시 그리기
+        }
+    }
+    return CWnd::PreTranslateMessage(pMsg);
+}
 
 BOOL CChildView::PreCreateWindow(CREATESTRUCT& cs) 
 {
@@ -61,6 +66,7 @@ BOOL CChildView::PreCreateWindow(CREATESTRUCT& cs)
 
 	cs.dwExStyle |= WS_EX_CLIENTEDGE;
 	cs.style &= ~WS_BORDER;
+	cs.style |= WS_CLIPCHILDREN;
 	cs.lpszClass = AfxRegisterWndClass(CS_HREDRAW|CS_VREDRAW|CS_DBLCLKS, 
 		::LoadCursor(nullptr, IDC_ARROW), reinterpret_cast<HBRUSH>(COLOR_WINDOW+1), nullptr);
 
@@ -81,62 +87,30 @@ void CChildView::OnPaint()
 	bitmap.CreateCompatibleBitmap(&dc, rect.Width(), rect.Height());
 	CBitmap* pOldBitmap = memDC.SelectObject(&bitmap);
 
-	memDC.FillSolidRect(&rect, RGB(255, 255, 255)); // 배경
+	DrawBackground(&memDC, rect);
+	DrawGameScene(&memDC);
+	DrawStatus(&memDC, rect);
 
-	memDC.Rectangle(m_boundary);
-	m_gameManager.DrawGame(&memDC);
-
-	ULONGLONG elapsedMillis = GetTickCount64() - m_startTick;
-	int minutes = (elapsedMillis / (1000 * 60)) % 60;
-	int seconds = (elapsedMillis / 1000) % 60;
-	int milliseconds = elapsedMillis % 1000;
-
-	LOGFONT logFont = { 0 };
-	logFont.lfHeight = 48;
-	_tcscpy_s(logFont.lfFaceName, _T("Arial"));
-	CFont font;
-	font.CreateFontIndirect(&logFont);
-	CFont* pOldFont = memDC.SelectObject(&font);
-
-	CString strTime;
-	strTime.Format(_T("%02d:%02d.%03d"), minutes, seconds, milliseconds);
-	memDC.TextOutW(rect.right - 190, 10, strTime);
-
-	int score = 2000 - m_gameManager.m_brickCount * 10;
-	CString strScore;
-	strScore.Format(_T("점수: %d"), score);
-	memDC.TextOutW(rect.right - 190, 60, strScore);
-
-	memDC.SelectObject(pOldFont);
-	
-	// 게임 시작 전: 텍스트만 출력
-	if (!m_isRunning) {
-		LOGFONT logFont = { 0 };
-		logFont.lfHeight = 60;
-		_tcscpy_s(logFont.lfFaceName, _T("Arial"));
-		CFont font;
-		font.CreateFontIndirect(&logFont);
-		CFont* pOldFont = memDC.SelectObject(&font);
-
-		CString title = _T("블록깨기 게임");
-		CString instruction = _T("시작하려면 \"게임 시작\" 버튼을 누르세요!");
-
-		CSize textSize = memDC.GetTextExtent(title);
-		CSize instructionSize = memDC.GetTextExtent(instruction);
-
-		int x = (rect.Width() - textSize.cx) / 2;
-		int y = (rect.Height() - textSize.cy) / 2;
-		memDC.TextOutW(x, y, title);
-		memDC.TextOutW(x, y + textSize.cy + 10, instruction);
-
-		memDC.SelectObject(pOldFont);
+	switch (m_gameState) {
+	case GAME_RUNNING:
+		DrawGameScene(&memDC);
+		break;
+	case GAME_WIN:
+		DrawGameResultMessage(&memDC, rect);
+		break;
+	case GAME_LOSE:
+		DrawGameResultMessage(&memDC, rect);
+		break;
+	case GAME_READY:
+		DrawStartScreen(&memDC, rect);
+		break;
 	}
 
 	dc.BitBlt(0, 0, rect.Width(), rect.Height(), &memDC, 0, 0, SRCCOPY);
+
 	memDC.SelectObject(pOldBitmap);
 	bitmap.DeleteObject();
 }
-
 
 void CChildView::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags) {
 	if (nChar == VK_LEFT) {
@@ -146,16 +120,18 @@ void CChildView::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags) {
 		m_gameManager.paddles[0].StartMovingRight();
 	}
 	else if (nChar == VK_UP) {
-		m_gameManager.paddles[0].StartMovingUp();
-	}
-	else if (nChar == VK_DOWN) {
-		m_gameManager.paddles[0].StartMovingDown();
+		if (m_gameState == GAME_READY) {
+			m_startTick = GetTickCount64();
+			m_gameManager.ResetGame(m_boundary, this);
+			m_gameState = GAME_RUNNING;
+			SetTimer(1, 16, nullptr);
+		}
 	}
 	CWnd::OnKeyDown(nChar, nRepCnt, nFlags);
 }
 
 void CChildView::OnKeyUp(UINT nChar, UINT nRepCnt, UINT nFlags) {
-	if (nChar == VK_LEFT || nChar == VK_RIGHT || nChar == VK_UP || nChar == VK_DOWN) {
+	if (nChar == VK_LEFT || nChar == VK_RIGHT) {
 		m_gameManager.paddles[0].StopMoving();
 	}
 	CWnd::OnKeyUp(nChar, nRepCnt, nFlags);
@@ -163,33 +139,30 @@ void CChildView::OnKeyUp(UINT nChar, UINT nRepCnt, UINT nFlags) {
 
 void CChildView::OnTimer(UINT_PTR nIDEvent) {
 	if (nIDEvent == 1) {
-		if (m_isRunning) {
-			Invalidate(FALSE);
-		}
+		ULONGLONG elapsedMillis = GetTickCount64() - m_startTick;
+		int minutes = (elapsedMillis / (1000 * 60)) % 60;
+		int seconds = (elapsedMillis / 1000) % 60;
+		int milliseconds = elapsedMillis % 1000;
+		
+		m_strTime.Format(_T("%02d:%02d.%03d"), minutes, seconds, milliseconds);
+
+		Invalidate(FALSE);
 
 		for (auto& ball : m_gameManager.balls) {
-			if (!ball.Update(m_boundary, this)) {
-				if (m_gameManager.balls.size() > 1) {
-					m_gameManager.DestroyBall(&ball);
-				}
-				else {
-					m_isRunning = false;
-					m_gameManager.DestroyBall(&ball);
-					m_gameManager.EndGame(this);
-					MessageBoxA(GetSafeHwnd(), "공이 떨어졌습니다...", "패배", MB_OK | MB_ICONERROR);
-					m_startButton.EnableWindow(TRUE);
-					m_startButton.SetFocus();
+			if (ball.Update(m_boundary, this))
+				continue;
 
-					//if (AfxMessageBox(_T("게임을 다시 시작하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) == IDYES) {
-					//	Invalidate(FALSE);
-					//	m_gameManager.ResetGame(m_boundary, this);
-					//	SetTimer(1, 16, nullptr);
-					//}
-					//else {
-					//	PostQuitMessage(0); // 프로그램 종료
-					//}
-					return; // 더 이상 업데이트하지 않음
-				}
+			if (m_gameManager.balls.size() > 1 && m_gameManager.m_brickCount != 0) {
+				m_gameManager.DestroyBall(&ball);
+			}
+			else {
+				(m_gameManager.m_brickCount == 0) ? m_gameState = GAME_WIN : m_gameState = GAME_LOSE;
+				m_gameManager.DestroyBall(&ball);
+				m_gameManager.EndGame(this);
+				highScore = m_gameManager.HighScore();
+				// 메시지용 타이머 시작
+				SetTimer(2, 500, NULL);
+				return;
 			}
 		}
 		for (auto& paddle : m_gameManager.paddles) {
@@ -200,6 +173,11 @@ void CChildView::OnTimer(UINT_PTR nIDEvent) {
 		}
 		m_gameManager.HandleCollisions(this);
 	}
+	else if (nIDEvent == 2) {
+		// 깜빡이기 토글
+		m_bShowContinueMsg = !m_bShowContinueMsg;
+		Invalidate(FALSE); // 다시 그리기
+	}
 	CWnd::OnTimer(nIDEvent);
 }
 
@@ -208,11 +186,6 @@ int CChildView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 {
 	if (CWnd::OnCreate(lpCreateStruct) == -1)
 		return -1;
-
-	// 버튼 생성
-	m_startButton.Create(_T("게임 시작"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-		CRect(10, 10, 100, 30), this, 1);
-	m_startButton.SetFocus();
 
 	return 0;
 }
@@ -231,27 +204,217 @@ void CChildView::OnSize(UINT nType, int cx, int cy)
 	{
 		m_boundary.SetRect(10, 10, cx - 200, cy - 10);
 		m_gameManager.ResetGame(m_boundary, this);
-
-		// 버튼 위치 조정
-		m_startButton.MoveWindow(cx - 190, 200, 180, 50);
 	}
 }
 
-void CChildView::OnStartButton() {
-	// 게임 시작 버튼 클릭 시
-	if (!m_isRunning) {
-		m_startTick = GetTickCount64();
-		m_gameManager.ResetGame(m_boundary, this);
-		m_isRunning = true;
-		SetTimer(1, 16, nullptr);
-		SetFocus();
-		m_startButton.EnableWindow(FALSE);
+void CChildView::DrawBackground(CDC* pDC, const CRect& rect)
+{
+	pDC->FillSolidRect(&rect, RGB(255, 255, 255)); // 흰 배경
+	pDC->Rectangle(m_boundary); // 외곽선
+}
+
+void CChildView::DrawGameScene(CDC* pDC)
+{
+	m_gameManager.DrawGame(pDC);
+}
+
+void CChildView::DrawStatus(CDC* pDC, const CRect& rect)
+{
+	// 공통 설정
+	pDC->SetTextColor(RGB(0, 0, 0));
+	pDC->SetBkMode(TRANSPARENT);
+
+	int baseX = rect.right - 190;
+	int currentY = 10;
+
+	// 상태 제목
+	pDC->TextOutW(baseX, currentY, _T("게임 결과"));
+	currentY += 30;
+
+	// 시간 표시용 폰트 설정
+	LOGFONT logFont = { 0 };
+	logFont.lfHeight = 48;
+	_tcscpy_s(logFont.lfFaceName, _T("맑은고딕"));
+	CFont font;
+	font.CreateFontIndirect(&logFont);
+	CFont* pOldFont = pDC->SelectObject(&font);
+
+	pDC->TextOutW(baseX, currentY, m_strTime);
+	currentY += 60;
+
+	// 점수용 폰트 설정
+	pDC->SelectObject(pOldFont); // 원래 폰트 복원
+
+	LOGFONT scoreFont = { 0 };
+	scoreFont.lfHeight = 25;
+	CFont smallFont;
+	smallFont.CreateFontIndirect(&scoreFont);
+	pOldFont = pDC->SelectObject(&smallFont);
+
+	// 현재 점수
+	CString strScoreText = _T("현재 점수 (목표: 2000)");
+	pDC->TextOutW(baseX, currentY, strScoreText);
+	currentY += 25;
+
+	int score = 2000 - m_gameManager.m_brickCount * 10;
+	CString strScore;
+	strScore.Format(_T("%d"), score);
+	pDC->TextOutW(baseX, currentY, strScore);
+	currentY += 40;
+
+	// 최고 점수
+	CString strHighScoreText = _T("최고 점수");
+	pDC->TextOutW(baseX, currentY, strHighScoreText);
+	currentY += 25;
+
+	CString strHighScore;
+	strHighScore.Format(_T("%d"), highScore);
+	pDC->TextOutW(baseX, currentY, strHighScore);
+
+	// 폰트 복원
+	pDC->SelectObject(pOldFont);
+}
+
+
+void CChildView::DrawStartScreen(CDC* pDC, const CRect& rect)
+{
+	// 메인 타이틀 폰트 설정
+	LOGFONT titleFontDef = { 0 };
+	titleFontDef.lfHeight = 60;
+	_tcscpy_s(titleFontDef.lfFaceName, _T("Arial"));
+
+	CFont titleFont;
+	titleFont.CreateFontIndirect(&titleFontDef);
+	CFont* pOldFont = pDC->SelectObject(&titleFont);
+
+	CString title = _T("게임 시작");
+
+	// 제목 크기 계산
+	CRect titleRect(0, 0, 0, 0);
+	pDC->DrawText(title, &titleRect, DT_CALCRECT);
+	int titleWidth = titleRect.Width();
+	int titleHeight = titleRect.Height();
+
+	// 박스 크기 및 위치 계산
+	int boxWidth = max(titleWidth, 500);
+	int boxHeight = titleHeight + 250;
+	int x = (rect.Width() - boxWidth) / 2;
+	int y = (rect.Height() - boxHeight) / 2;
+	CRect boxRect(x, y, x + boxWidth, y + boxHeight);
+
+	// 박스 배경 및 테두리 그리기
+	CBrush boxBrush(RGB(230, 230, 230));
+	CPen boxPen(PS_SOLID, 2, RGB(100, 100, 100));
+	CBrush* pOldBrush = pDC->SelectObject(&boxBrush);
+	CPen* pOldPen = pDC->SelectObject(&boxPen);
+
+	pDC->RoundRect(&boxRect, CPoint(20, 20));
+
+	// 원래 상태 복구
+	pDC->SelectObject(pOldBrush);
+	pDC->SelectObject(pOldPen);
+
+	// 제목 출력
+	pDC->SetTextColor(RGB(0, 0, 0));
+	pDC->SetBkMode(TRANSPARENT);
+	pDC->TextOutW(x + (boxWidth - titleWidth) / 2, y + 20, title);
+
+	// 방향키 버튼 위치 계산
+	int keySize = 70;
+	int keyCenterX = x + boxWidth / 2;
+	int keyTopY = y + titleHeight + 60;
+
+	CRect keys[4];
+	keys[0] = CRect(keyCenterX - keySize / 2, keyTopY, keyCenterX + keySize / 2, keyTopY + keySize); // ↑
+	keys[1] = CRect(keyCenterX - keySize / 2, keyTopY + keySize + 10, keyCenterX + keySize / 2, keyTopY + keySize * 2 + 10); // ↓
+	keys[2] = CRect(keyCenterX - keySize * 1.5 - 10, keyTopY + keySize + 10, keyCenterX - keySize / 2 - 10, keyTopY + keySize * 2 + 10); // ←
+	keys[3] = CRect(keyCenterX + keySize / 2 + 10, keyTopY + keySize + 10, keyCenterX + keySize * 1.5 + 10, keyTopY + keySize * 2 + 10); // →
+
+	CString arrows[4] = { _T("▲"), _T("▽"), _T("◀"), _T("▶") };
+
+	// 방향키 폰트 설정
+	LOGFONT keyFontDef = { 0 };
+	keyFontDef.lfHeight = 40;
+	_tcscpy_s(keyFontDef.lfFaceName, _T("Arial"));
+
+	CFont keyFont;
+	keyFont.CreateFontIndirect(&keyFontDef);
+	CFont* pOldKeyFont = pDC->SelectObject(&keyFont);
+
+	// 방향키 박스 및 텍스트 출력
+	for (int i = 0; i < 4; ++i)
+	{
+		COLORREF brushColor = RGB(255, 255, 255); // 기본 흰색
+		COLORREF textColor = RGB(0, 0, 0);        // 기본 검정
+
+		switch (i) {
+		case 0: // ↑ 시작 키
+			brushColor = RGB(60, 60, 60);         // 진한 회색
+			textColor = RGB(255, 255, 255);       // 흰 글씨
+			break;
+		case 1: // ↓ 중립
+			break;
+		case 2: // ← 조작
+		case 3: // → 조작
+			brushColor = RGB(255, 240, 150);      // 연한 노랑
+			textColor = RGB(0, 0, 0);
+			break;
+		}
+
+		// 색상 적용
+		CBrush keyBrush(brushColor);
+		CBrush* pOldKeyBrush = pDC->SelectObject(&keyBrush);
+		pDC->RoundRect(&keys[i], CPoint(20, 20));
+		pDC->SelectObject(pOldKeyBrush);
+
+		// 텍스트 색상 적용
+		pDC->SetTextColor(textColor);
+		CSize textSize = pDC->GetTextExtent(arrows[i]);
+		int textX = keys[i].left + (keySize - textSize.cx) / 2;
+		int textY = keys[i].top + (keySize - textSize.cy) / 2;
+		pDC->TextOutW(textX, textY, arrows[i]);
+
 	}
-	else {
-		m_isRunning = false;
-		KillTimer(1);
-		m_startButton.EnableWindow(TRUE);
+
+	// 폰트 원상복구
+	pDC->SelectObject(pOldKeyFont);
+	pDC->SelectObject(pOldFont);
+}
+
+void CChildView::DrawGameResultMessage(CDC* pDC, const CRect& rect)
+{
+	if (m_gameState != GAME_WIN && m_gameState != GAME_LOSE)
+		return;
+
+	CString message = (m_gameState == GAME_WIN) ? _T("🎉 승리했습니다!") : _T("😢 패배했습니다...");
+
+	LOGFONT logFont = { 0 };
+	logFont.lfHeight = 48;
+	_tcscpy_s(logFont.lfFaceName, _T("맑은 고딕"));
+	logFont.lfWeight = FW_BOLD;
+	CFont font;
+	font.CreateFontIndirect(&logFont);
+	CFont* pOldFont = pDC->SelectObject(&font);
+
+	pDC->SetTextColor(RGB(255, 0, 0));
+	pDC->SetBkMode(TRANSPARENT);
+
+	CSize textSize = pDC->GetTextExtent(message);
+	int x = rect.left + (rect.Width() - textSize.cx) / 2;
+	int y = rect.top + (rect.Height() - textSize.cy) / 2;
+
+	pDC->TextOutW(x, y, message);
+
+	pDC->SelectObject(pOldFont);
+
+	if (m_bShowContinueMsg)
+	{
+		CString msg = _T("계속하려면 아무 키나 누르세요...");
+		pDC->SetTextColor(RGB(0, 0, 0));
+		CSize msgSize = pDC->GetTextExtent(msg);
+		int msgX = rect.left + (rect.Width() - msgSize.cx) / 2;
+		int msgY = y + textSize.cy + 30;
+		pDC->TextOutW(msgX, msgY, msg);
 	}
-	Invalidate(TRUE);
 }
 
