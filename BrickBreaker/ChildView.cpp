@@ -48,13 +48,21 @@ BOOL CChildView::PreTranslateMessage(MSG* pMsg)
 {
     if (pMsg->message == WM_KEYDOWN)
     {
-        if (m_gameState == GAME_WIN || m_gameState == GAME_LOSE)
+        if (m_gameState == GAME_LOSE)
         {
             m_gameState = GAME_READY;
 			KillTimer(2);
 			m_bShowContinueMsg = true;
             Invalidate(); // 화면 다시 그리기
         }
+		else if (m_gameState == GAME_WIN)
+		{
+			KillTimer(2);
+			m_bShowContinueMsg = true;
+			m_gameState = GAME_RUNNING;
+			SetTimer(1, 16, nullptr);
+			m_gameManager.NextLevel(m_boundary, this);
+		}
     }
     return CWnd::PreTranslateMessage(pMsg);
 }
@@ -149,14 +157,20 @@ void CChildView::OnTimer(UINT_PTR nIDEvent) {
 		Invalidate(FALSE);
 
 		for (auto& ball : m_gameManager.balls) {
+			if (m_gameManager.m_stageClear == 0) {
+				KillTimer(1);
+				m_gameState = GAME_WIN;
+				return;
+			}
+
 			if (ball.Update(m_boundary, this))
 				continue;
 
-			if (m_gameManager.balls.size() > 1 && m_gameManager.m_brickCount != 0) {
+			if (m_gameManager.balls.size() > 1) {
 				m_gameManager.DestroyBall(&ball);
 			}
 			else {
-				(m_gameManager.m_brickCount == 0) ? m_gameState = GAME_WIN : m_gameState = GAME_LOSE;
+				m_gameState = GAME_LOSE;
 				m_gameManager.DestroyBall(&ball);
 				m_gameManager.EndGame(this);
 				highScore = m_gameManager.HighScore();
@@ -234,12 +248,18 @@ void CChildView::DrawStatus(CDC* pDC, const CRect& rect)
 	// 시간 표시용 폰트 설정
 	LOGFONT logFont = { 0 };
 	logFont.lfHeight = 48;
-	_tcscpy_s(logFont.lfFaceName, _T("맑은고딕"));
+	_tcscpy_s(logFont.lfFaceName, _T("맑은 고딕"));
 	CFont font;
 	font.CreateFontIndirect(&logFont);
 	CFont* pOldFont = pDC->SelectObject(&font);
 
 	pDC->TextOutW(baseX, currentY, m_strTime);
+	currentY += 60;
+
+	// 현재 레벨
+	CString levelText;
+	levelText.Format(_T("Lv. %d"), m_gameManager.m_level);
+	pDC->TextOutW(baseX, currentY, levelText);
 	currentY += 60;
 
 	// 점수용 폰트 설정
@@ -252,11 +272,11 @@ void CChildView::DrawStatus(CDC* pDC, const CRect& rect)
 	pOldFont = pDC->SelectObject(&smallFont);
 
 	// 현재 점수
-	CString strScoreText = _T("현재 점수 (목표: 2000)");
+	CString strScoreText = _T("현재 점수");
 	pDC->TextOutW(baseX, currentY, strScoreText);
 	currentY += 25;
 
-	int score = 2000 - m_gameManager.m_brickCount * 10;
+	int score = m_gameManager.m_brickCount * 10;
 	CString strScore;
 	strScore.Format(_T("%d"), score);
 	pDC->TextOutW(baseX, currentY, strScore);
@@ -281,7 +301,7 @@ void CChildView::DrawStartScreen(CDC* pDC, const CRect& rect)
 	// 메인 타이틀 폰트 설정
 	LOGFONT titleFontDef = { 0 };
 	titleFontDef.lfHeight = 60;
-	_tcscpy_s(titleFontDef.lfFaceName, _T("Arial"));
+	_tcscpy_s(titleFontDef.lfFaceName, _T("맑은 고딕"));
 
 	CFont titleFont;
 	titleFont.CreateFontIndirect(&titleFontDef);
@@ -335,7 +355,7 @@ void CChildView::DrawStartScreen(CDC* pDC, const CRect& rect)
 	// 방향키 폰트 설정
 	LOGFONT keyFontDef = { 0 };
 	keyFontDef.lfHeight = 40;
-	_tcscpy_s(keyFontDef.lfFaceName, _T("Arial"));
+	_tcscpy_s(keyFontDef.lfFaceName, _T("맑은 고딕"));
 
 	CFont keyFont;
 	keyFont.CreateFontIndirect(&keyFontDef);
@@ -386,7 +406,7 @@ void CChildView::DrawGameResultMessage(CDC* pDC, const CRect& rect)
 	if (m_gameState != GAME_WIN && m_gameState != GAME_LOSE)
 		return;
 
-	CString message = (m_gameState == GAME_WIN) ? _T("🎉 승리했습니다!") : _T("😢 패배했습니다...");
+	CString message = (m_gameState == GAME_WIN) ? _T("🎉 레벨 클리어!") : _T("😢 공을 떨어뜨렸어요...");
 
 	LOGFONT logFont = { 0 };
 	logFont.lfHeight = 48;
@@ -409,7 +429,7 @@ void CChildView::DrawGameResultMessage(CDC* pDC, const CRect& rect)
 
 	if (m_bShowContinueMsg)
 	{
-		CString msg = _T("계속하려면 아무 키나 누르세요...");
+		CString msg = (m_gameState == GAME_WIN) ? _T("다음 레벨을 시작하려면 아무 키나 누르세요...") : _T("다시 시작하려면 아무 키나 누르세요...");
 		pDC->SetTextColor(RGB(0, 0, 0));
 		CSize msgSize = pDC->GetTextExtent(msg);
 		int msgX = rect.left + (rect.Width() - msgSize.cx) / 2;
@@ -417,4 +437,3 @@ void CChildView::DrawGameResultMessage(CDC* pDC, const CRect& rect)
 		pDC->TextOutW(msgX, msgY, msg);
 	}
 }
-
