@@ -24,7 +24,7 @@ void GameManager::StartGame(CRect boundary, CWnd* pWnd) {
     int centerX = boundary.left + (boundary.Width() / 2);
 
     // 패들 배치 (화면 중앙 아래에 배치)
-    int paddleWidth = 2800;// 200 - m_level * 10;
+    int paddleWidth = 200 - m_level * 10;
     int paddleHeight = 20;
     int paddleX = centerX - paddleWidth / 2;
     int paddleY = boundary.bottom - paddleHeight - 10;
@@ -121,7 +121,7 @@ void GameManager::HandleCollisions(CWnd* pWnd) {
                 continue;
 
             // 공과 벽돌 충돌
-            std::println("충돌! 볼 위치 {}, {} / 브릭 위치 [{}, {} / {}, {}]", ball.m_x, ball.m_y, brick.x, brick.y, brick.x + brick.width, brick.y + brick.height);
+            std::println("충돌! 볼 위치 ({}, {}) 속도 {}, {} / 브릭 위치 [{}, {} / {}, {}]", ball.m_x, ball.m_y, ball.m_dx, ball.m_dy, brick.x, brick.y, brick.x + brick.width, brick.y + brick.height);
 
             brick.Break();
             brick.Update(boundary, pWnd);
@@ -130,16 +130,17 @@ void GameManager::HandleCollisions(CWnd* pWnd) {
                 m_stageClear--;
             }
 
-            if (ball.m_dy > 0) continue;
-
             // 방향성 변경
-            if (ball.m_y < brick.y + brick.height) {
+            if (ball.m_dy < 0) {
+                std::println("y 방향성 변경");
+                ball.m_dy = -ball.m_dy;
+            }
+
+            
+            if (ball.m_y <= brick.y + brick.height) {
+                std::println("x 방향성 변경");
                 ball.m_dx = -ball.m_dx;
-                ball.m_dy = -ball.m_dy;
-            }
-            else {
-                ball.m_dy = -ball.m_dy;
-            }
+            }           
         }
     }  
 
@@ -158,15 +159,17 @@ void GameManager::HandleCollisions(CWnd* pWnd) {
             if (distanceSquared > ball.m_radius * ball.m_radius) // 공과 패들의 거리
                 continue;
 			
-            if (ball.m_dy < 0) continue;
-
             // 방향성 변경
-            if (std::abs(dx) > std::abs(dy)) {
-                ball.m_dx = -ball.m_dx;
-            }
-            else {
+            if (ball.m_dy > 0) {
+                std::println("--패들-- y 방향성 변경");
                 ball.m_dy = -ball.m_dy;
             }
+                        
+            if (ball.m_y + ball.m_radius >= paddle.y + paddle.height) {
+				std::println("**패들** x 방향성 변경");
+                ball.m_dx = -ball.m_dx;
+            }
+
         }
     }
 }
