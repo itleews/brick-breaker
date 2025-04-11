@@ -12,10 +12,10 @@ public:
     int m_ball_dx;
     int m_ball_dy;
     int m_stageClear;
-    int m_ballCount;
     int m_highScore = 0;
     int m_life = 3;
     int m_level = 1;
+    int m_nextBallId = 0;
 
     std::vector<Ball> balls;
     std::vector<Paddle> paddles;
@@ -32,7 +32,6 @@ public:
     void DestroyBall(Ball* ball);
     void GenerateBall(int paddle_x, int paddle_y, int paddle_width);
 	void DrawBricks(CRect boundary);
-    void ApplyItemEffect(int type);
     int HighScore();
     double clamp(double value, double min, double max) {
         return max(min, min(value, max));

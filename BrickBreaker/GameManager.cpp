@@ -8,18 +8,6 @@
 #include <print>
 
 void GameManager::StartGame(CRect boundary, CWnd* pWnd) {
-    switch (m_level) {
-	case 1:
-		m_ballCount = 1;
-		break;
-	case 2:
-		m_ballCount = 2;
-		break;
-    default:
-		m_ballCount = 3;
-        break;
-    }
-    
     // 게임 영역의 중앙 계산
     int centerX = boundary.left + (boundary.Width() / 2);
 
@@ -37,13 +25,7 @@ void GameManager::StartGame(CRect boundary, CWnd* pWnd) {
     m_ball_dx = static_cast<int>(baseSpeed * speedMultiplier);
     m_ball_dy = static_cast<int>(-baseSpeed * speedMultiplier);
 
-	for (int i = 0; i < m_ballCount; i++) {
-		// 공을 패들 위에 배치
-		int ballX = centerX + i * ballRadius;  // 공 간격 조정
-		int ballY = paddleY - 20 - (i * (ballRadius * 2 + 5));  // 패들의 위쪽에 공 배치
-		// 공 생성 및 추가
-		balls.push_back(Ball(i, ballX, ballY, ballRadius, m_ball_dx, m_ball_dy));
-	}
+	GenerateBall(paddleX, paddleY, paddleWidth);
 
 	DrawBricks(boundary); // 벽돌 그리기
 }
@@ -58,6 +40,7 @@ void GameManager::ResetGame(const CRect& boundary, CWnd* pWnd) {
     m_brickCount = 0;
     m_level = 1;
     m_life = 3;
+    m_nextBallId = 0;
     balls.clear();
     paddles.clear();
     bricks.clear();
@@ -101,15 +84,13 @@ void GameManager::DestroyBall(Ball* ball) {
         return b == *ball; // 값 비교
         });
     balls.erase(it, balls.end());
-	std::println("공 제거");
 }
 
 void GameManager::GenerateBall(int paddle_x, int paddle_y, int paddle_width) {
 	// 공 생성 로직
     int centerX = paddle_x + paddle_width / 2; // 공의 x 좌표
-	int centerY = paddle_y - 20; // 공의 y 좌표
-    balls.push_back(Ball(balls.size(), centerX, centerY, 20, m_ball_dx, m_ball_dy));
-    std::println("공 생성");
+	int centerY = paddle_y - 20; // 공의 y 좌표  
+    balls.push_back(Ball(m_nextBallId++, centerX, centerY, 20, m_ball_dx, m_ball_dy));
 }
 
 void GameManager::HandleCollisions(CWnd* pWnd) {
@@ -118,52 +99,56 @@ void GameManager::HandleCollisions(CWnd* pWnd) {
 
     // 공과 벽돌, 공과 패들 충돌 체크
     
-    for (auto& brick : bricks) 
-    {
-        for (auto& ball : balls)
-        {
-            if (brick.isBroken) // 부서진 경우
+    for (auto& ball : balls) {
+        double closestDistanceSquared = DBL_MAX;
+        Brick* collidedBrick = nullptr;
+
+        for (auto& brick : bricks) {
+            if (brick.isBroken)
                 continue;
 
-			double closestX = clamp(ball.m_x, (double)brick.x, (double)(brick.x + brick.width));
-			double closestY = clamp(ball.m_y, (double)brick.y, (double)(brick.y + brick.height));
+            double closestX = clamp(ball.m_x, (double)brick.x, (double)(brick.x + brick.width));
+            double closestY = clamp(ball.m_y, (double)brick.y, (double)(brick.y + brick.height));
 
-			double dx = ball.m_x - closestX;
-			double dy = ball.m_y - closestY;
+            double dx = ball.m_x - closestX;
+            double dy = ball.m_y - closestY;
+            double distanceSquared = dx * dx + dy * dy;
 
-			double distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared <= ball.m_radius * ball.m_radius && distanceSquared < closestDistanceSquared) {
+                closestDistanceSquared = distanceSquared;
+                collidedBrick = &brick;
+            }
+        }
 
-            if (distanceSquared > ball.m_radius * ball.m_radius) // 공과 벽돌의 거리
-                continue;
+        // 한 개만 처리
+        if (collidedBrick) {
+            //std::println("충돌! 볼 위치 ({}, {}) / 브릭 위치 [{}, {}]", ball.m_x, ball.m_y, collidedBrick->x, collidedBrick->y);
 
-            // 공과 벽돌 충돌
-            std::println("충돌! 볼 위치 ({}, {}) 속도 {}, {} / 브릭 위치 [{}, {} / {}, {}]", ball.m_x, ball.m_y, ball.m_dx, ball.m_dy, brick.x, brick.y, brick.x + brick.width, brick.y + brick.height);
+            collidedBrick->Break();
+            collidedBrick->Update(boundary, pWnd);
 
-            brick.Break();
-            brick.Update(boundary, pWnd);
-
-            if (brick.itemType != 0) {
-                items.push_back(Item(brick.x + brick.width / 2, brick.y, (ItemType)brick.itemType));
+            if (collidedBrick->itemType != 0) {
+                items.push_back(Item(collidedBrick->x + collidedBrick->width / 2, collidedBrick->y, (ItemType)collidedBrick->itemType));
             }
 
-            if (brick.isBroken) {
+            if (collidedBrick->isBroken) {
                 m_brickCount++;
                 m_stageClear--;
             }
 
             // 방향성 변경
             if (ball.m_dy < 0) {
-                std::println("y 방향성 변경");
+                //std::println("y 방향성 변경");
                 ball.m_dy = -ball.m_dy;
             }
 
-            
-            if (ball.m_y <= brick.y + brick.height) {
-                std::println("x 방향성 변경");
+
+            if (ball.m_y <= collidedBrick->y + collidedBrick->height) {
+                //std::println("x 방향성 변경");
                 ball.m_dx = -ball.m_dx;
-            }           
+            }
         }
-    }  
+    }
 
     for (auto& paddle : paddles) 
     {
@@ -182,12 +167,12 @@ void GameManager::HandleCollisions(CWnd* pWnd) {
 			
             // 방향성 변경
             if (ball.m_dy > 0) {
-                std::println("--패들-- y 방향성 변경");
+                //std::println("--패들-- y 방향성 변경");
                 ball.m_dy = -ball.m_dy;
             }
                         
             if (ball.m_y + ball.m_radius >= paddle.y + paddle.height) {
-				std::println("**패들** x 방향성 변경");
+				//std::println("**패들** x 방향성 변경");
                 ball.m_dx = -ball.m_dx;
             }
 
@@ -236,8 +221,8 @@ void GameManager::HandleCollisions(CWnd* pWnd) {
 }
 
 void GameManager::DrawBricks(CRect boundary) {
-    int rows = 10;
-    int cols = 20;
+    int rows = 1;
+    int cols = 2;
     int brickWidth = (boundary.Width() - 110) / cols;
     int brickHeight = (boundary.Height() / 3) / rows;
     int startX = 20; // 시작 x 좌표
@@ -262,7 +247,7 @@ void GameManager::DrawBricks(CRect boundary) {
 
             // 랜덤 내구도 (1~3)
             if (itemType == 0) {
-                hitCount = (rand() % 3) + 1;
+                hitCount = (rand() % m_level) + 1;
                 switch (hitCount) {
                 case 1:
                     r = 255; g = 160; b = 122;  // Light Salmon
@@ -272,6 +257,9 @@ void GameManager::DrawBricks(CRect boundary) {
                     break;
                 case 3:
                     r = 205; g = 92;  b = 92;   // Indian Red
+                    break;
+                default:
+                    r = 139; g = 0; b = 0;  // Dark Red
                     break;
                 }
             }

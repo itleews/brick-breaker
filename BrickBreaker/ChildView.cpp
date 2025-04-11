@@ -320,7 +320,7 @@ void CChildView::DrawStatus(CDC* pDC, const CRect& rect)
 
 	// 생명 표시
 	currentY += 40;
-	CString strLifeText = _T("남은 공");
+	CString strLifeText = _T("남은 생명");
 	pDC->TextOutW(baseX, currentY, strLifeText);
 	currentY += 30;
 
@@ -455,7 +455,7 @@ void CChildView::DrawGameResultMessage(CDC* pDC, const CRect& rect)
 	if (m_gameState != GAME_WIN && m_gameState != GAME_LOSE)
 		return;
 
-	CString message = (m_gameState == GAME_WIN) ? _T("🎉 레벨 클리어!") : _T("😢 공을 떨어뜨렸어요...");
+	CString message = (m_gameState == GAME_WIN) ? _T("🎉 레벨 클리어!") : _T("😢 Game Over...");
 
 	LOGFONT logFont = { 0 };
 	logFont.lfHeight = 48;
@@ -465,7 +465,11 @@ void CChildView::DrawGameResultMessage(CDC* pDC, const CRect& rect)
 	font.CreateFontIndirect(&logFont);
 	CFont* pOldFont = pDC->SelectObject(&font);
 
-	pDC->SetTextColor(RGB(255, 0, 0));
+	COLORREF color = (m_gameState == GAME_WIN)
+		? RGB(0, 200, 100)
+		: RGB(250, 0, 0);
+
+	pDC->SetTextColor(color);
 	pDC->SetBkMode(TRANSPARENT);
 
 	CSize textSize = pDC->GetTextExtent(message);
@@ -491,7 +495,7 @@ void CChildView::DrawItemMessage(CDC* pDC, const CRect& rect)
 {
 	for (const auto& message : m_gameManager.effectMessages) {
 		CFont font;
-		font.CreatePointFont(120, _T("맑은 고딕"));
+		font.CreatePointFont(240, _T("맑은 고딕"));
 		CFont* pOldFont = pDC->SelectObject(&font);
 
 		pDC->SetBkMode(TRANSPARENT);
