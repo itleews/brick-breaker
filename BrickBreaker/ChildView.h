@@ -32,6 +32,7 @@ public:
 	void DrawStatus(CDC* pDC, const CRect& rect);
 	void DrawStartScreen(CDC* pDC, const CRect& rect);
 	void DrawGameResultMessage(CDC* pDC, const CRect& rect);
+	void DrawItemMessage(CDC* pDC, const CRect& rect);
 
 // 재정의입니다.
 	protected:

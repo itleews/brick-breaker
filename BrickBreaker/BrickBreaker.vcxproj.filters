@@ -51,6 +51,9 @@
     <ClInclude Include="Ball.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="Item.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="BrickBreaker.cpp">
@@ -87,12 +90,16 @@
     <None Include="res\BrickBreaker.rc2">
       <Filter>리소스 파일</Filter>
     </None>
+    <None Include="cpp.hint" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\BrickBreaker.ico">
       <Filter>리소스 파일</Filter>
     </Image>
     <Image Include="res\Toolbar.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\bitmap1.bmp">
       <Filter>리소스 파일</Filter>
     </Image>
   </ItemGroup>

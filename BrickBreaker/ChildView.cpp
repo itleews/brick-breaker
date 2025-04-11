@@ -82,42 +82,44 @@ BOOL CChildView::PreCreateWindow(CREATESTRUCT& cs)
 }
 
 
-void CChildView::OnPaint()
-{
-	CPaintDC dc(this); // 그리기 DC
-	CDC memDC;
-	memDC.CreateCompatibleDC(&dc);
+void CChildView::OnPaint()  
+{  
+   CPaintDC dc(this); // 그리기 DC  
+   CDC memDC;  
+   memDC.CreateCompatibleDC(&dc);  
 
-	CRect rect;
-	GetClientRect(&rect);
+   CRect rect;  
+   GetClientRect(&rect);  
 
-	CBitmap bitmap;
-	bitmap.CreateCompatibleBitmap(&dc, rect.Width(), rect.Height());
-	CBitmap* pOldBitmap = memDC.SelectObject(&bitmap);
+   CBitmap bitmap;  
+   bitmap.CreateCompatibleBitmap(&dc, rect.Width(), rect.Height());  
+   CBitmap* pOldBitmap = memDC.SelectObject(&bitmap);  
 
-	DrawBackground(&memDC, rect);
-	DrawGameScene(&memDC);
-	DrawStatus(&memDC, rect);
+   DrawBackground(&memDC, rect);  
+   DrawGameScene(&memDC);  
+   DrawStatus(&memDC, rect);  
 
-	switch (m_gameState) {
-	case GAME_RUNNING:
-		DrawGameScene(&memDC);
-		break;
-	case GAME_WIN:
-		DrawGameResultMessage(&memDC, rect);
-		break;
-	case GAME_LOSE:
-		DrawGameResultMessage(&memDC, rect);
-		break;
-	case GAME_READY:
-		DrawStartScreen(&memDC, rect);
-		break;
-	}
+   switch (m_gameState) {  
+   case GAME_RUNNING:  
+       DrawGameScene(&memDC);  
+       break;  
+   case GAME_WIN:  
+       DrawGameResultMessage(&memDC, rect);  
+       break;  
+   case GAME_LOSE:  
+       DrawGameResultMessage(&memDC, rect);  
+       break;  
+   case GAME_READY:  
+       DrawStartScreen(&memDC, rect);  
+       break;  
+   }  
 
-	dc.BitBlt(0, 0, rect.Width(), rect.Height(), &memDC, 0, 0, SRCCOPY);
+   DrawItemMessage(&memDC, rect);
 
-	memDC.SelectObject(pOldBitmap);
-	bitmap.DeleteObject();
+   dc.BitBlt(0, 0, rect.Width(), rect.Height(), &memDC, 0, 0, SRCCOPY);  
+
+   memDC.SelectObject(pOldBitmap);  
+   bitmap.DeleteObject();  
 }
 
 void CChildView::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags) {
@@ -163,28 +165,53 @@ void CChildView::OnTimer(UINT_PTR nIDEvent) {
 				return;
 			}
 
-			if (ball.Update(m_boundary, this))
+			if (ball.Update(m_boundary, this)) {
 				continue;
+			}
 
+			// 공 제거 로직
 			if (m_gameManager.balls.size() > 1) {
 				m_gameManager.DestroyBall(&ball);
+				continue;
 			}
-			else {
+
+			// 공이 하나만 남았고 생명이 있으면 새 공 추가
+			if (m_gameManager.balls.size() == 1 && m_gameManager.m_life > 0) {
+				m_gameManager.DestroyBall(&ball);
+				m_gameManager.GenerateBall(m_gameManager.paddles[0].x, m_gameManager.paddles[0].y, m_gameManager.paddles[0].width);
+				m_gameManager.m_life--;
+				continue;
+			}
+
+			if (m_gameManager.m_life == 0) {
 				m_gameState = GAME_LOSE;
 				m_gameManager.DestroyBall(&ball);
 				m_gameManager.EndGame(this);
 				highScore = m_gameManager.HighScore();
-				// 메시지용 타이머 시작
 				SetTimer(2, 500, NULL);
 				return;
 			}
 		}
+
 		for (auto& paddle : m_gameManager.paddles) {
 			paddle.Update(m_boundary, this);
 		}
 		for (auto& brick : m_gameManager.bricks) {
 			brick.Update(m_boundary, this);
 		}
+
+		for (auto it = m_gameManager.effectMessages.begin(); it != m_gameManager.effectMessages.end(); ) {
+			it->timer--;
+			it->position.y += static_cast<int>(it->velocityY); // 위로 이동
+
+			if (it->timer <= 0) {
+				it = m_gameManager.effectMessages.erase(it);
+			}
+			else {
+				++it;
+			}
+		}
+
 		m_gameManager.HandleCollisions(this);
 	}
 	else if (nIDEvent == 2) {
@@ -291,10 +318,32 @@ void CChildView::DrawStatus(CDC* pDC, const CRect& rect)
 	strHighScore.Format(_T("%d"), highScore);
 	pDC->TextOutW(baseX, currentY, strHighScore);
 
+	// 생명 표시
+	currentY += 40;
+	CString strLifeText = _T("남은 공");
+	pDC->TextOutW(baseX, currentY, strLifeText);
+	currentY += 30;
+
 	// 폰트 복원
 	pDC->SelectObject(pOldFont);
-}
 
+	int heartSize = 30;
+	int spacing = 5;
+	for (int i = 0; i < m_gameManager.m_life; i++)
+	{
+		int x = baseX + i * (heartSize + spacing);
+		int y = currentY;
+
+		// 노란 브러시 생성
+		CBrush yellowBrush(RGB(255, 255, 0));
+		CBrush* pOldBrush = pDC->SelectObject(&yellowBrush);
+
+		// 원(공) 그리기
+		pDC->Ellipse(x, y, x + heartSize, y + heartSize);
+
+		pDC->SelectObject(pOldBrush);
+	}
+}
 
 void CChildView::DrawStartScreen(CDC* pDC, const CRect& rect)
 {
@@ -435,5 +484,47 @@ void CChildView::DrawGameResultMessage(CDC* pDC, const CRect& rect)
 		int msgX = rect.left + (rect.Width() - msgSize.cx) / 2;
 		int msgY = y + textSize.cy + 30;
 		pDC->TextOutW(msgX, msgY, msg);
+	}
+}
+
+void CChildView::DrawItemMessage(CDC* pDC, const CRect& rect)
+{
+	for (const auto& message : m_gameManager.effectMessages) {
+		CFont font;
+		font.CreatePointFont(120, _T("맑은 고딕"));
+		CFont* pOldFont = pDC->SelectObject(&font);
+
+		pDC->SetBkMode(TRANSPARENT);
+
+		CSize textSize = pDC->GetTextExtent(message.text);
+		int x = message.position.x - textSize.cx / 2;
+		int y = message.position.y - textSize.cy / 2;
+
+		// 아이템 타입에 따라 색상 지정
+		COLORREF textColor;
+		switch (message.type) {
+		case ItemType::PaddleEnlarge:
+			textColor = RGB(0, 128, 255); // 파랑
+			break;
+		case ItemType::Heal:
+			textColor = RGB(0, 200, 0);   // 초록
+			break;
+		case ItemType::BallIncrease:
+			textColor = RGB(255, 64, 64); // 빨강
+			break;
+		default:
+			textColor = RGB(0, 0, 0); // 기본
+			break;
+		}
+
+		// 그림자 먼저 그리기
+		pDC->SetTextColor(RGB(50, 50, 50));
+		pDC->TextOutW(x + 2, y + 2, message.text);
+
+		// 실제 텍스트
+		pDC->SetTextColor(textColor);
+		pDC->TextOutW(x, y, message.text);
+
+		pDC->SelectObject(pOldFont);
 	}
 }

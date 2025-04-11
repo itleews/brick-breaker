@@ -34,15 +34,15 @@ void GameManager::StartGame(CRect boundary, CWnd* pWnd) {
     int ballRadius = 20;
     int baseSpeed = 20;
     double speedMultiplier = 1.0 + (m_level - 1) * 0.2;
-    int dx = static_cast<int>(baseSpeed * speedMultiplier);
-    int dy = static_cast<int>(-baseSpeed * speedMultiplier);
+    m_ball_dx = static_cast<int>(baseSpeed * speedMultiplier);
+    m_ball_dy = static_cast<int>(-baseSpeed * speedMultiplier);
 
 	for (int i = 0; i < m_ballCount; i++) {
 		// 공을 패들 위에 배치
 		int ballX = centerX + i * ballRadius;  // 공 간격 조정
 		int ballY = paddleY - 20 - (i * (ballRadius * 2 + 5));  // 패들의 위쪽에 공 배치
 		// 공 생성 및 추가
-		balls.push_back(Ball(i, ballX, ballY, ballRadius, dx, dy));
+		balls.push_back(Ball(i, ballX, ballY, ballRadius, m_ball_dx, m_ball_dy));
 	}
 
 	DrawBricks(boundary); // 벽돌 그리기
@@ -57,9 +57,11 @@ void GameManager::ResetGame(const CRect& boundary, CWnd* pWnd) {
     // 게임 상태 초기화
     m_brickCount = 0;
     m_level = 1;
+    m_life = 3;
     balls.clear();
     paddles.clear();
     bricks.clear();
+    items.clear();
     StartGame(boundary, pWnd);
     CChildView* pChildView = static_cast<CChildView*>(pWnd);
     pChildView->m_startTick = GetTickCount64();
@@ -67,9 +69,11 @@ void GameManager::ResetGame(const CRect& boundary, CWnd* pWnd) {
 
 void GameManager::NextLevel(const CRect& boundary, CWnd* pWnd) {
     m_level++;
+    m_life = 3;
     balls.clear();
     paddles.clear();
     bricks.clear();
+	items.clear();
     StartGame(boundary, pWnd);
 }
 
@@ -86,7 +90,10 @@ void GameManager::DrawGame(CDC* pDC) {
         if (!brick.isBroken) {
             brick.Draw(pDC);  
         }  
-    }  
+    }
+    for (auto& item : items) {
+        item.Draw(pDC);
+    }
 }
 
 void GameManager::DestroyBall(Ball* ball) {
@@ -94,6 +101,15 @@ void GameManager::DestroyBall(Ball* ball) {
         return b == *ball; // 값 비교
         });
     balls.erase(it, balls.end());
+	std::println("공 제거");
+}
+
+void GameManager::GenerateBall(int paddle_x, int paddle_y, int paddle_width) {
+	// 공 생성 로직
+    int centerX = paddle_x + paddle_width / 2; // 공의 x 좌표
+	int centerY = paddle_y - 20; // 공의 y 좌표
+    balls.push_back(Ball(balls.size(), centerX, centerY, 20, m_ball_dx, m_ball_dy));
+    std::println("공 생성");
 }
 
 void GameManager::HandleCollisions(CWnd* pWnd) {
@@ -125,6 +141,11 @@ void GameManager::HandleCollisions(CWnd* pWnd) {
 
             brick.Break();
             brick.Update(boundary, pWnd);
+
+            if (brick.itemType != 0) {
+                items.push_back(Item(brick.x + brick.width / 2, brick.y, (ItemType)brick.itemType));
+            }
+
             if (brick.isBroken) {
                 m_brickCount++;
                 m_stageClear--;
@@ -172,6 +193,46 @@ void GameManager::HandleCollisions(CWnd* pWnd) {
 
         }
     }
+
+    for (auto& item : items) {
+        if (!item.isActive) continue;
+
+        item.Update();
+
+        for (auto& paddle : paddles) {
+            CRect paddleRect(paddle.x, paddle.y, paddle.x + paddle.width, paddle.y + paddle.height);
+            CRect itemRect = item.GetRect();
+            CRect intersectRect;
+            CString message;
+
+            if (intersectRect.IntersectRect(&itemRect, &paddleRect)) {
+                item.isActive = false;
+
+                switch (item.type) {
+                case ItemType::PaddleEnlarge:
+                    paddle.width += 50;
+                    message = _T("패들 사이즈 UP!");
+                    break;
+                case ItemType::Heal:
+                    m_life++;
+					message = _T("생명 +1!");
+                    break;
+                case ItemType::BallIncrease:
+					GenerateBall(paddle.x, paddle.y, paddle.width);
+                    message = _T("볼 +1!");
+                    break;
+                }
+
+                // 메시지 저장
+                effectMessages.push_back({
+                    message,
+                    CPoint(paddle.x + paddle.width / 2, paddle.y - 30),
+                    60, // 약 1초
+					item.type
+                });
+            }
+        }
+    }
 }
 
 void GameManager::DrawBricks(CRect boundary) {
@@ -191,23 +252,36 @@ void GameManager::DrawBricks(CRect boundary) {
             int x = startX + col * (brickWidth + gap);
             int y = startY + row * (brickHeight + gap);
 
-            // 랜덤 내구도 (1~3)  
-            int hitCount = /*(rand() % 3) +*/ 1;
+            int itemChance = rand() % 100;
+            int itemType = 0;
+            int hitCount = 1;
             int r = 0, g = 0, b = 0;
-            switch (hitCount) {
-            case 1:
-                r = 255; g = 99; b = 71;
-                break;
-            case 2:
-                r = 255; g = 0; b = 0;
-                break;
-            case 3:
-                r = 178; g = 34; b = 34;
-                break;
+            if (itemChance < 15) {  // 15% 확률
+                itemType = (rand() % 3) + 1; // 아이템 종류 1~3 중 랜덤
+            }
+
+            // 랜덤 내구도 (1~3)
+            if (itemType == 0) {
+                hitCount = (rand() % 3) + 1;
+                switch (hitCount) {
+                case 1:
+                    r = 255; g = 160; b = 122;  // Light Salmon
+                    break;
+                case 2:
+                    r = 240; g = 128; b = 128;  // Light Coral
+                    break;
+                case 3:
+                    r = 205; g = 92;  b = 92;   // Indian Red
+                    break;
+                }
+            }
+            else {
+				// 아이템 색상
+                r = 102; g = 205; b = 170;  // Medium Aquamarine
             }
             COLORREF color = RGB(r, g, b);
 
-            bricks.push_back(Brick(x, y, brickWidth, brickHeight, color, hitCount));
+            bricks.push_back(Brick(x, y, brickWidth, brickHeight, color, hitCount, itemType));
         }
     }
 }

@@ -12,7 +12,7 @@ void Paddle::Draw(CDC* pDC) {
 bool Paddle::Update(CRect boundary, CWnd* pWnd) {
     CRect oldRect(x - dx, y, x + width + dx, y + height);  // 이전 위치 확장
 
-    dx = 30;  // 패들의 이동 속도
+    dx = 50;  // 패들의 이동 속도
 
     if (movingLeft && boundary.left < x - dx) {
         x -= dx;

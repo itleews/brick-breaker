@@ -193,6 +193,7 @@
     <ClInclude Include="framework.h" />
     <ClInclude Include="GameManager.h" />
     <ClInclude Include="GameObject.h" />
+    <ClInclude Include="Item.h" />
     <ClInclude Include="MainFrm.h" />
     <ClInclude Include="Paddle.h" />
     <ClInclude Include="pch.h" />
@@ -218,9 +219,11 @@
     <ResourceCompile Include="BrickBreaker.rc" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="cpp.hint" />
     <None Include="res\BrickBreaker.rc2" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="res\bitmap1.bmp" />
     <Image Include="res\BrickBreaker.ico" />
     <Image Include="res\Toolbar.bmp" />
   </ItemGroup>
