@@ -1,7 +1,5 @@
 ﻿#include "pch.h"  
 #include "GameManager.h"  
-#include <afxwin.h> // CWnd 포함  
-#include <atltypes.h> // CRect 포함  
 #include "ChildView.h"
 #include <cstdlib>  // rand(), srand()
 #include <ctime>    // time()
@@ -221,8 +219,8 @@ void GameManager::HandleCollisions(CWnd* pWnd) {
 }
 
 void GameManager::DrawBricks(CRect boundary) {
-    int rows = 1;
-    int cols = 2;
+    int rows = 10;
+    int cols = 20;
     int brickWidth = (boundary.Width() - 110) / cols;
     int brickHeight = (boundary.Height() / 3) / rows;
     int startX = 20; // 시작 x 좌표
