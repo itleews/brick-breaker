@@ -162,6 +162,7 @@ void CChildView::OnTimer(UINT_PTR nIDEvent) {
 			if (m_gameManager.m_stageClear == 0) {
 				KillTimer(1);
 				m_gameState = GAME_WIN;
+				SetTimer(2, 500, NULL);
 				return;
 			}
 
