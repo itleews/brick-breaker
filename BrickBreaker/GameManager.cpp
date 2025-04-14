@@ -1,6 +1,7 @@
 ﻿#include "pch.h"  
 #include "GameManager.h"  
 #include "ChildView.h"
+#include "RecordManager.h"
 #include <cstdlib>  // rand(), srand()
 #include <ctime>    // time()
 #include <print>
@@ -140,7 +141,6 @@ void GameManager::HandleCollisions(CWnd* pWnd) {
                 ball.m_dy = -ball.m_dy;
             }
 
-
             if (ball.m_y <= collidedBrick->y + collidedBrick->height) {
                 //std::println("x 방향성 변경");
                 ball.m_dx = -ball.m_dx;
@@ -275,9 +275,12 @@ void GameManager::DrawBricks(CRect boundary) {
 int GameManager::HighScore() {
 	// 최고 점수 계산
     int score = m_brickCount * 10;
+    m_highScore = HighScoreManager::LoadHighScore();
+
     if (score > m_highScore) {
+        HighScoreManager::SaveHighScore(score);
         m_highScore = score;
     }
-    std::println("현재 점수: {}, 최고 점수: {}", score, m_highScore);
+    // std::println("현재 점수: {}, 최고 점수: {}", score, m_highScore);
 	return m_highScore;
 }

@@ -188,7 +188,6 @@ void CChildView::OnTimer(UINT_PTR nIDEvent) {
 				m_gameState = GAME_LOSE;
 				m_gameManager.DestroyBall(&ball);
 				m_gameManager.EndGame(this);
-				highScore = m_gameManager.HighScore();
 				SetTimer(2, 500, NULL);
 				return;
 			}
@@ -316,6 +315,7 @@ void CChildView::DrawStatus(CDC* pDC, const CRect& rect)
 	currentY += 25;
 
 	CString strHighScore;
+	highScore = m_gameManager.HighScore();
 	strHighScore.Format(_T("%d"), highScore);
 	pDC->TextOutW(baseX, currentY, strHighScore);
 
